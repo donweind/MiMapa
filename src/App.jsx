@@ -4,7 +4,7 @@ import {
   Type, Bold, Italic, ZoomIn, ZoomOut, Maximize, Download as DownloadIcon, 
   Save, FolderOpen, TriangleAlert, Flame, Zap, Skull, HeartPulse, DoorOpen, 
   Info, LayoutTemplate, Edit, Users, Lock, ShieldCheck, FileJson, Filter,
-  Eye, EyeOff, LogOut, Settings, MousePointer2, CheckCircle2, Clock, AlertOctagon, FileImage, ArrowRight, Circle, FileText
+  Eye, EyeOff, LogOut, Settings, MousePointer2, CheckCircle2, Clock, AlertOctagon, FileImage, ArrowRight, Circle, FileText, FileBadge, Layers
 } from 'lucide-react';
 
 /* --- CURSORES PERSONALIZADOS (NEGROS) --- */
@@ -56,7 +56,6 @@ const BASE_MARKER_SIZE_PX = 24;
 
 /* --- COMPONENTES EXTRAÍDOS --- */
 
-// Componente Wrapper para manejar eventos comunes y Doble Click
 const ElementWrapper = React.memo(({ children, point, isSelected, readOnly, onMouseDown, onDoubleClick }) => {
   return (
     <div 
@@ -72,7 +71,6 @@ const ElementWrapper = React.memo(({ children, point, isSelected, readOnly, onMo
       }}
       onClick={(e) => {
           e.stopPropagation();
-          // Si es solo lectura, el click simple sirve para seleccionar/ver popup
           if(readOnly) onDoubleClick(e, point.id); 
       }}
       className={`absolute flex items-center justify-center select-none z-20 transition-transform duration-200 
@@ -83,7 +81,7 @@ const ElementWrapper = React.memo(({ children, point, isSelected, readOnly, onMo
         transform: 'translate(-50%, -50%)' 
       }}
     >
-      {/* ELIMINADO: Indicador de Estado (Punto de color pequeño) */}
+      {/* ELIMINADO: Indicador de Estado */}
       {children}
     </div>
   );
@@ -166,7 +164,6 @@ const Popup = React.memo(({ point, onClose }) => {
     transform: 'translate(0, -50%)'
   };
 
-  // Status Labels map
   const statusLabels = {
       'executed': { text: 'EJECUTADO', bg: 'bg-green-100', textC: 'text-green-700', border: 'border-green-300' },
       'process': { text: 'EN PROCESO', bg: 'bg-orange-100', textC: 'text-orange-700', border: 'border-orange-300' },
@@ -183,11 +180,27 @@ const Popup = React.memo(({ point, onClose }) => {
       onClick={(e) => e.stopPropagation()}
     >
       <div className="bg-gray-50 px-4 py-3 border-b flex justify-between items-center">
-        <div className="flex flex-col gap-1">
-            <h3 className="font-bold text-gray-800 text-sm truncate pr-2 max-w-[250px]">{point.title}</h3>
-            <div className="flex gap-2">
+        <div className="flex flex-col gap-1 w-full">
+            {/* TÍTULO (Usando Label como Título) */}
+            <h3 className="font-black text-gray-900 text-lg truncate pr-2 max-w-[250px]">{point.label}</h3>
+            
+            {/* LUGAR */}
+            {point.place && (
+                <div className="flex items-center gap-1 text-xs text-gray-500 font-medium">
+                    <MapIcon size={12} /> {point.place}
+                </div>
+            )}
+            
+            {/* PRIORIDAD, ESTADO Y DOCUMENTO */}
+            <div className="flex flex-wrap gap-2 mt-1">
                 {point.priority && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${point.priority === 'A' ? 'bg-red-50 text-red-600 border-red-200' : point.priority === 'B' ? 'bg-yellow-50 text-yellow-600 border-yellow-200' : 'bg-green-50 text-green-600 border-green-200'}`}>PRIORIDAD {point.priority}</span>}
                 {statusConfig && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${statusConfig.bg} ${statusConfig.textC} ${statusConfig.border}`}>{statusConfig.text}</span>}
+                {/* DOCUMENTO (Movido aquí) */}
+                {point.docType && point.docCode && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-1">
+                        <FileBadge size={8}/> {point.docType} | {point.docCode}
+                    </span>
+                )}
             </div>
         </div>
         <button onClick={onClose} className="text-gray-400 hover:text-red-500 transition-colors p-1 rounded-full hover:bg-red-50">
@@ -197,7 +210,7 @@ const Popup = React.memo(({ point, onClose }) => {
       
       {point.image ? (
         <div className="relative h-80 bg-gray-100">
-           <img src={point.image} alt={point.title} className="w-full h-full object-cover" />
+           <img src={point.image} alt={point.label} className="w-full h-full object-cover" />
            <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none"></div>
         </div>
       ) : (
@@ -207,7 +220,9 @@ const Popup = React.memo(({ point, onClose }) => {
       )}
       
       <div className="p-4 bg-white">
-         <p className="text-sm text-gray-600 leading-relaxed">
+         {/* TITULO DE DESCRIPCIÓN */}
+         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Descripción</p>
+         <p className="text-sm text-gray-700 leading-relaxed">
            {point.description || <span className="italic text-gray-400">Sin descripción disponible.</span>}
          </p>
       </div>
@@ -225,20 +240,31 @@ export default function App() {
   const [loginError, setLoginError] = useState(false);
   const [adminPreviewMode, setAdminPreviewMode] = useState(false);
 
-  /* --- ESTADOS DEL MAPA --- */
-  const [mapImage, setMapImage] = useState(null);
-  const [points, setPoints] = useState([]);
+  /* --- ESTADOS DEL MAPA (Multi-Nivel) --- */
+  // Niveles disponibles: Sótano (sotano), Tierra (tierra), Mezanine (mezanine)
+  const [levels, setLevels] = useState({
+      sotano: { id: 'sotano', label: 'Sótano', short: 'ST', mapImage: null, points: [] },
+      tierra: { id: 'tierra', label: 'Nivel Tierra', short: 'P1', mapImage: null, points: [] },
+      mezanine: { id: 'mezanine', label: 'Mezanine', short: 'MZ', mapImage: null, points: [] },
+  });
+  const [currentLevelId, setCurrentLevelId] = useState('tierra');
+
+  // Helpers para acceder a los datos del nivel actual
+  const currentLevel = levels[currentLevelId];
+  const mapImage = currentLevel.mapImage;
+  const points = currentLevel.points;
+
+  /* --- OTROS ESTADOS --- */
   const [selectedPointId, setSelectedPointId] = useState(null);
   const [tool, setTool] = useState('marker'); 
   const [filterPriority, setFilterPriority] = useState('ALL'); 
-  
   const [matteShade, setMatteShade] = useState('light');
   const [draggingElementId, setDraggingElementId] = useState(null); 
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [startPan, setStartPan] = useState({ x: 0, y: 0 });
-
+  const [isDrag, setIsDrag] = useState(false); 
   const [isProcessingPDF, setIsProcessingPDF] = useState(false);
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
   const [bulkImportText, setBulkImportText] = useState('');
@@ -246,8 +272,8 @@ export default function App() {
   const mapRef = useRef(null);
   const imgRef = useRef(null);
   const containerRef = useRef(null); 
-  const fileInputRef = useRef(null); // Para cargar JSON
-  const mapInputRef = useRef(null); // Para cargar Nueva Imagen de Mapa
+  const fileInputRef = useRef(null); 
+  const mapInputRef = useRef(null); 
   const jsonInputRef = useRef(null);
 
   useEffect(() => {
@@ -260,6 +286,34 @@ export default function App() {
         document.body.appendChild(script);
     }
   }, []);
+
+  /* --- MANEJO DE ESTADO MULTI-NIVEL (Setters Wrappers) --- */
+  const setMapImageForLevel = (img) => {
+      setLevels(prev => ({
+          ...prev,
+          [currentLevelId]: { ...prev[currentLevelId], mapImage: img }
+      }));
+  };
+
+  const setPointsForLevel = (newPointsOrUpdater) => {
+      setLevels(prev => {
+          const currentPoints = prev[currentLevelId].points;
+          const nextPoints = typeof newPointsOrUpdater === 'function' 
+              ? newPointsOrUpdater(currentPoints) 
+              : newPointsOrUpdater;
+          return {
+              ...prev,
+              [currentLevelId]: { ...prev[currentLevelId], points: nextPoints }
+          };
+      });
+  };
+
+  const handleLevelChange = (levelId) => {
+      setCurrentLevelId(levelId);
+      setSelectedPointId(null);
+      // Opcional: Resetear zoom/pan al cambiar de piso o mantenerlo
+      // setZoom(1); setPan({x:0,y:0}); 
+  };
 
   /* --- LÓGICA DE NAVEGACIÓN Y LOGIN --- */
   const handleLoginSubmit = (e) => {
@@ -277,13 +331,15 @@ export default function App() {
 
   const handleFabricationEntry = () => {
     setIsAdmin(false);
-    if (mapImage) {
+    // Verificar si hay algún mapa cargado en cualquier nivel
+    const hasAnyMap = Object.values(levels).some(l => l.mapImage !== null);
+    
+    if (hasAnyMap) {
         setCurrentScreen('fabrication_view');
         setZoom(1); 
         setPan({x:0, y:0});
     } else {
         setCurrentScreen('fabrication_load');
-        setPoints([]); 
     }
   };
 
@@ -296,13 +352,14 @@ export default function App() {
   };
 
   const handleCloseProject = () => {
-      // Limpia el mapa y los puntos, pero se mantiene en la pantalla de edición
-      // permitiendo volver a subir un archivo.
-      if(window.confirm("¿Estás seguro de cerrar el proyecto? Se borrarán el mapa y los puntos actuales.")) {
-          setMapImage(null);
-          setPoints([]);
+      if(window.confirm("¿Estás seguro de cerrar el proyecto? Se borrarán todos los mapas y puntos.")) {
+          setLevels({
+            sotano: { id: 'sotano', label: 'Sótano', short: 'ST', mapImage: null, points: [] },
+            tierra: { id: 'tierra', label: 'Nivel Tierra', short: 'P1', mapImage: null, points: [] },
+            mezanine: { id: 'mezanine', label: 'Mezanine', short: 'MZ', mapImage: null, points: [] },
+          });
+          setCurrentLevelId('tierra');
           setSelectedPointId(null);
-          // NO llamamos a handleExitToLanding(), nos quedamos en 'editor'
       }
   };
 
@@ -312,7 +369,6 @@ export default function App() {
       
       const lines = bulkImportText.split('\n');
       const newPoints = lines.map((line, index) => {
-          // Intentar separar por tabuladores (Excel) o comas
           let parts;
           if (line.includes('\t')) {
               parts = line.split('\t');
@@ -320,18 +376,23 @@ export default function App() {
               parts = line.split(/[,;]+/).map(s => s.trim());
           }
           
-          // Mínimo necesitamos el ID/Número
           if (parts.length < 1 || !parts[0]) return null;
 
-          const labelRaw = parts[0]?.trim() || ''; // Ej: "LDA 77"
-          const prioRaw = parts[1]?.trim().toUpperCase() || 'C'; // Ej: "B"
-          // Descripción es todo lo que queda
-          const descRaw = parts.length > 2 ? parts.slice(2).join(' ').trim() : ''; 
+          const labelRaw = parts[0]?.trim() || ''; 
+          const prioRaw = parts[1]?.trim().toUpperCase() || 'C'; 
+          const descRaw = parts[2]?.trim() || ''; 
+          const placeRaw = parts[3]?.trim() || '';
+          const statusRaw = parts[4]?.trim().toUpperCase() || 'PENDIENTE';
+          let finalStatus = 'pending';
+          if (statusRaw.includes('EJECUTADO')) finalStatus = 'executed';
+          else if (statusRaw.includes('PROCESO')) finalStatus = 'process';
+          else if (statusRaw.includes('ATRASADO')) finalStatus = 'delayed';
 
-          // Validar prioridad
+          const docTypeRaw = parts[5]?.trim().toUpperCase() || '';
+          const docCodeRaw = parts[6]?.trim() || '';
+
           const finalPrio = ['A','B','C'].includes(prioRaw) ? prioRaw : 'C';
 
-          // Detectar si es LDA o FC para aplicar estilos
           const isLDA = labelRaw.toUpperCase().includes('LDA');
           const isFC = labelRaw.toUpperCase().includes('FC');
           
@@ -348,17 +409,17 @@ export default function App() {
               pointConfig = {
                   style: 'green',
                   markerColor: MARKER_STYLES.green.bg,
-                  scaleX: 3,        // Estándar 2
-                  scaleY: 1.1,      
+                  scaleX: 3.6,        
+                  scaleY: 1.3,        
                   markerFontSize: 20, 
                   textColor: '#ffffff'
               };
           } else if (isFC) {
                pointConfig = {
                   style: 'yellow',
-                  markerColor: RECT_PALETTES['Amarillo Monocromo'][2], // Tono 3 (#fde047)
-                  scaleX: 3,        // Estándar 2
-                  scaleY: 1.1,
+                  markerColor: RECT_PALETTES['Amarillo Monocromo'][2], 
+                  scaleX: 3.6,        
+                  scaleY: 1.3,
                   markerFontSize: 20,
                   textColor: '#000000'
               };
@@ -366,23 +427,24 @@ export default function App() {
 
           return {
               id: Date.now() + index,
-              // Organizar en cuadrícula inicial
               x: 5 + (index % 10) * 5, 
               y: 10 + Math.floor(index / 10) * 5,
-              title: descRaw || "Sin descripción", // Título del popup = Descripción
-              label: labelRaw, // Texto del marcador = Número (LDA/FC XX)
+              label: labelRaw, 
               priority: finalPrio,
               description: descRaw, 
+              place: placeRaw,
+              docType: ['LUP','POE','LILA'].includes(docTypeRaw) ? docTypeRaw : '',
+              docCode: docCodeRaw,
               type: 'marker',
-              status: 'pending',
+              status: finalStatus,
               ...pointConfig
           };
       }).filter(p => p !== null);
 
-      setPoints(prev => [...prev, ...newPoints]);
+      setPointsForLevel(prev => [...prev, ...newPoints]);
       setBulkImportText('');
       setShowBulkImportModal(false);
-      alert(`Se han importado ${newPoints.length} puntos. Aparecerán en la esquina superior izquierda.`);
+      alert(`Se han importado ${newPoints.length} puntos en el nivel ${currentLevel.label}.`);
   };
 
   /* --- GESTIÓN DE ARCHIVOS --- */
@@ -400,7 +462,7 @@ export default function App() {
         canvas.height = viewport.height;
         canvas.width = viewport.width;
         await page.render({ canvasContext: context, viewport: viewport }).promise;
-        setMapImage(canvas.toDataURL('image/png'));
+        setMapImageForLevel(canvas.toDataURL('image/png'));
         setPan({x: 0, y: 0});
         setZoom(1);
       } catch (error) {
@@ -409,7 +471,7 @@ export default function App() {
     } else {
       const reader = new FileReader();
       reader.onload = (e) => {
-        setMapImage(e.target.result);
+        setMapImageForLevel(e.target.result);
         setPan({x: 0, y: 0});
         setZoom(1);
       };
@@ -431,11 +493,11 @@ export default function App() {
 
   /* --- IMPORTAR / EXPORTAR --- */
   const handleExportProject = () => {
-    if (!mapImage) return alert("No hay un mapa para exportar.");
-    const dataStr = JSON.stringify({ version: "1.0", timestamp: new Date().toISOString(), mapImage, points, view: { zoom, pan } });
+    // Exportamos el objeto completo 'levels'
+    const dataStr = JSON.stringify({ version: "2.0", timestamp: new Date().toISOString(), levels, view: { zoom, pan }, currentLevelId });
     const link = document.createElement('a');
     link.href = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    link.download = `mapa_proyecto_${new Date().toLocaleDateString().replace(/\//g, '-')}.json`;
+    link.download = `mapa_proyecto_multinivel_${new Date().toLocaleDateString().replace(/\//g, '-')}.json`;
     link.click();
   };
 
@@ -446,9 +508,25 @@ export default function App() {
     reader.onload = (ev) => {
         try {
             const data = JSON.parse(ev.target.result);
-            if (!data.mapImage) throw new Error("Archivo inválido.");
-            setMapImage(data.mapImage);
-            setPoints(data.points || []);
+            
+            // Soporte para versión anterior (1.0) - Migración
+            if (data.version === "1.0" || (!data.levels && data.mapImage)) {
+                // Mover datos antiguos al nivel tierra
+                setLevels(prev => ({
+                    ...prev,
+                    tierra: { ...prev.tierra, mapImage: data.mapImage, points: data.points || [] }
+                }));
+                setCurrentLevelId('tierra');
+            } else if (data.levels) {
+                // Carga versión 2.0
+                setLevels(data.levels);
+                if (data.currentLevelId && data.levels[data.currentLevelId]) {
+                    setCurrentLevelId(data.currentLevelId);
+                }
+            } else {
+                throw new Error("Formato inválido");
+            }
+
             if (data.view) { setZoom(data.view.zoom || 1); setPan(data.view.pan || { x: 0, y: 0 }); }
             
             if (currentScreen === 'fabrication_load') {
@@ -540,15 +618,23 @@ export default function App() {
         }
         
         const link = document.createElement('a');
-        link.download = 'mapa_exportado.jpg'; 
+        link.download = `mapa_${currentLevel.id}.jpg`; 
         link.href = canvas.toDataURL('image/jpeg', 0.9); 
         link.click();
     } catch { alert("Error al exportar la imagen."); }
   };
 
   /* --- HELPERS DE ESTADO --- */
-  const updatePoint = (id, field, value) => setPoints(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
-  const deletePoint = (id) => { setPoints(prev => prev.filter(p => p.id !== id)); setSelectedPointId(null); };
+  const updatePoint = (id, field, value) => {
+      setPointsForLevel(prev => prev.map(p => {
+          if (p.id !== id) return p;
+          if (field === 'label') {
+              return { ...p, label: value, title: value }; 
+          }
+          return { ...p, [field]: value };
+      }));
+  };
+  const deletePoint = (id) => { setPointsForLevel(prev => prev.filter(p => p.id !== id)); setSelectedPointId(null); };
 
   const clampPan = useCallback((proposedPan, currentZoom) => {
     if (!containerRef.current || !imgRef.current) return proposedPan;
@@ -582,7 +668,7 @@ export default function App() {
   const handleWheel = (e) => {
       if (!mapImage || !containerRef.current) return;
       
-      e.preventDefault(); // Prevent default scroll
+      e.preventDefault(); 
 
       const rect = containerRef.current.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
@@ -622,15 +708,20 @@ export default function App() {
       if (isPanning) {
           e.preventDefault();
           setPan(p => clampPan({ x: e.clientX - startPan.x, y: e.clientY - startPan.y }, zoom));
+          setIsDrag(true); 
       } else if (draggingElementId && mapRef.current && isAdmin && !adminPreviewMode) { 
           e.preventDefault();
           const r = mapRef.current.getBoundingClientRect();
           const x = Math.max(0, Math.min(100, ((e.clientX - r.left) / r.width) * 100));
           const y = Math.max(0, Math.min(100, ((e.clientY - r.top) / r.height) * 100));
-          setPoints(prev => prev.map(p => p.id === draggingElementId ? { ...p, x, y } : p));
+          setPointsForLevel(prev => prev.map(p => p.id === draggingElementId ? { ...p, x, y } : p));
       }
     };
-    const onUp = () => { setIsPanning(false); setDraggingElementId(null); };
+    const onUp = () => { 
+        setIsPanning(false); 
+        setDraggingElementId(null); 
+        setTimeout(() => setIsDrag(false), 50);
+    };
     
     if (isPanning || draggingElementId) {
         window.addEventListener('mousemove', onMove);
@@ -645,8 +736,9 @@ export default function App() {
     if (!isAdmin || adminPreviewMode || !mapImage || isPanning || draggingElementId) return; 
     const r = mapRef.current.getBoundingClientRect();
     const nextNum = points.filter(p => p.type === 'marker').length + 1;
+    
     // Default Priority A, Status Process
-    const base = { id: Date.now(), x: ((e.clientX-r.left)/r.width)*100, y: ((e.clientY-r.top)/r.height)*100, title: `Punto ${nextNum}`, image: null, description: '', priority: 'A', status: 'process' };
+    const base = { id: Date.now(), x: ((e.clientX-r.left)/r.width)*100, y: ((e.clientY-r.top)/r.height)*100, label: `Punto ${nextNum}`, image: null, description: '', priority: 'A', status: 'process' };
     
     let newItem;
     if (tool === 'safety') {
@@ -656,7 +748,7 @@ export default function App() {
     } else {
         newItem = { ...base, type: 'marker', label: `${nextNum}`, style: 'green', scaleX: 1, scaleY: 1, markerFontSize: 10, textColor: '#ffffff', markerColor: MARKER_STYLES.green.bg };
     }
-    setPoints([...points, newItem]); setSelectedPointId(newItem.id);
+    setPointsForLevel(prev => [...prev, newItem]); setSelectedPointId(newItem.id);
   };
 
   const visiblePoints = points.filter(p => filterPriority === 'ALL' || p.priority === filterPriority);
@@ -800,7 +892,7 @@ export default function App() {
                                 : (isViewer ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100')
                             }`}
                         >
-                            {f === 'ALL' ? 'Todos' : `Nivel ${f}`}
+                            {f === 'ALL' ? 'Todos' : `${f}`}
                         </button>
                     ))}
                 </div>
@@ -873,7 +965,25 @@ export default function App() {
         )}
       </header>
 
-      {/* MODAL DE IMPORTACIÓN MASIVA */}
+      {/* SELECTOR FLOTANTE DE PISOS (Option A) */}
+      {mapImage && (
+        <div className={`absolute right-6 top-32 flex flex-col gap-2 z-50 ${isViewer ? 'text-white' : ''}`}>
+             <div className="bg-black/90 text-white rounded-xl shadow-xl p-1.5 flex flex-col gap-1 border border-white/10 backdrop-blur-sm">
+                <span className="text-[9px] font-bold text-center text-gray-400 mb-1 uppercase tracking-wider">Nivel</span>
+                {Object.values(levels).map((lvl) => (
+                    <button
+                        key={lvl.id}
+                        onClick={() => handleLevelChange(lvl.id)}
+                        className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-xs transition-all ${currentLevelId === lvl.id ? 'bg-blue-600 text-white shadow-lg scale-105' : 'bg-white/10 text-gray-400 hover:bg-white/20 hover:text-white'}`}
+                        title={lvl.label}
+                    >
+                        {lvl.short}
+                    </button>
+                ))}
+             </div>
+        </div>
+      )}
+
       {showBulkImportModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in">
               <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg">
@@ -885,11 +995,11 @@ export default function App() {
                       <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-200">
                           <p className="font-bold mb-1">Instrucciones:</p>
                           <p>Pega tu lista de datos en el siguiente formato (una línea por punto):</p>
-                          <code className="block mt-2 bg-white p-1 rounded border border-gray-200 font-mono text-gray-600">Número, Prioridad (A/B/C), Descripción</code>
+                          <code className="block mt-2 bg-white p-1 rounded border border-gray-200 font-mono text-gray-600">Número, Prioridad (A/B/C), Descripción, Lugar, Estado, TipoDoc, CodigoDoc</code>
                       </div>
                       <textarea 
                           className="w-full h-48 border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-black focus:border-black outline-none font-mono"
-                          placeholder={`Ejemplo:\nLDA 77, B, Rejilla de sumidero\nLDA 78, A, Muro de contención`}
+                          placeholder={`Ejemplo:\nLDA 77, B, Rejilla, Zona 1, PENDIENTE, LILA, 001\nFC 10, A, Fuga, Zona 2, EJECUTADO, POE, 002`}
                           value={bulkImportText}
                           onChange={(e) => setBulkImportText(e.target.value)}
                       />
@@ -908,15 +1018,13 @@ export default function App() {
             <div className="p-6 flex-1 overflow-y-auto custom-scrollbar">
               {!mapImage && (
                  <div className="flex flex-col gap-3">
-                    {/* Opción Subir Plano */}
                     <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:bg-gray-50 transition-colors cursor-pointer relative group">
                         <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*,application/pdf" onChange={(e) => handleFileUpload(e)} />
                         <div className="bg-gray-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-400 group-hover:scale-110 transition-transform">{isProcessingPDF ? <Loader2 className="animate-spin" size={20}/> : <Upload size={20} />}</div>
-                        <h3 className="text-sm font-bold text-gray-700">{isProcessingPDF ? 'Procesando PDF...' : 'Subir Plano'}</h3>
+                        <h3 className="text-sm font-bold text-gray-700">{isProcessingPDF ? 'Procesando PDF...' : `Subir Plano (${currentLevel.short})`}</h3>
                         <p className="text-xs text-gray-400 mt-1">Formatos: JPG, PNG, PDF</p>
                     </div>
                     
-                    {/* Nueva opción Cargar JSON debajo */}
                     <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center hover:bg-gray-50 transition-colors cursor-pointer group flex flex-col items-center justify-center gap-2">
                         <div className="bg-gray-100 w-10 h-10 rounded-full flex items-center justify-center text-gray-400 group-hover:text-black transition-colors">
                             <FileJson size={18} />
@@ -1047,7 +1155,7 @@ export default function App() {
                          </div>
                       </div>
                       <div className="space-y-1 pt-4"><label className="text-[10px] font-bold text-gray-400 uppercase">Tamaño</label><input type="range" min="0.5" max="3" step="0.1" className="w-full" value={points.find(p => p.id === selectedPointId)?.scaleX || 1.5} onChange={(e) => { const v = parseFloat(e.target.value); updatePoint(selectedPointId, 'scaleX', v); updatePoint(selectedPointId, 'scaleY', v); }} /></div>
-                      <div className="space-y-4 pt-4 border-t"><div className="flex items-center gap-2"><span className="text-[10px] font-bold bg-blue-50 text-blue-500 px-2 rounded">INFO POPUP</span></div><div className="space-y-1"><label className="text-xs text-gray-500">Título</label><input type="text" className="w-full border rounded px-2 py-1.5 text-sm" value={points.find(p => p.id === selectedPointId)?.title || ''} onChange={(e) => updatePoint(selectedPointId, 'title', e.target.value)} /></div><div className="space-y-2"><label className="text-xs text-gray-500">Imagen</label>{!points.find(p => p.id === selectedPointId)?.image ? (<label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50"><ImageIcon size={16}/><input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, (res) => updatePoint(selectedPointId, 'image', res))} /></label>) : (<div className="relative group"><img src={points.find(p => p.id === selectedPointId).image} className="w-full h-32 object-cover rounded-lg" /><div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex justify-center items-center gap-2 transition-opacity"><label className="cursor-pointer bg-white p-1.5 rounded-full"><Edit size={14}/><input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, (res) => updatePoint(selectedPointId, 'image', res))} /></label></div></div>)}</div><div className="space-y-1"><textarea className="w-full border rounded px-2 py-2 text-sm" rows="3" value={points.find(p => p.id === selectedPointId)?.description || ''} onChange={(e) => updatePoint(selectedPointId, 'description', e.target.value)} /></div></div>
+                      <div className="space-y-4 pt-4 border-t"><div className="flex items-center gap-2"><span className="text-[10px] font-bold bg-blue-50 text-blue-500 px-2 rounded">INFO POPUP</span></div><div className="space-y-1"><label className="text-xs text-gray-500">Etiqueta</label><input type="text" className="w-full border rounded px-2 py-1.5 text-sm" value={points.find(p => p.id === selectedPointId)?.label || ''} onChange={(e) => updatePoint(selectedPointId, 'label', e.target.value)} /></div><div className="space-y-1 pt-2"><label className="text-[10px] font-bold text-gray-400 uppercase">Lugar</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm" value={points.find(p => p.id === selectedPointId)?.place || ''} onChange={(e) => updatePoint(selectedPointId, 'place', e.target.value)} placeholder="Ej: Zona Norte" /></div><div className="space-y-2 pt-2 border-t mt-2"><label className="text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1"><FileBadge size={10}/> Documento Asociado</label><div className="flex gap-2">{['LUP', 'POE', 'LILA'].map(doc => (<button key={doc} onClick={() => updatePoint(selectedPointId, 'docType', doc)} className={`flex-1 py-1 text-[10px] font-bold rounded border transition-all ${points.find(p => p.id === selectedPointId)?.docType === doc ? 'bg-blue-100 text-blue-700 border-blue-300 ring-1 ring-blue-500' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>{doc}</button>))}</div><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Código (Ej: TPM-MP1-001)" value={points.find(p => p.id === selectedPointId)?.docCode || ''} onChange={(e) => updatePoint(selectedPointId, 'docCode', e.target.value)} /></div><div className="space-y-2"><label className="text-xs text-gray-500">Imagen</label>{!points.find(p => p.id === selectedPointId)?.image ? (<label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50"><ImageIcon size={16}/><input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, (res) => updatePoint(selectedPointId, 'image', res))} /></label>) : (<div className="relative group"><img src={points.find(p => p.id === selectedPointId).image} className="w-full h-32 object-cover rounded-lg" /><div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex justify-center items-center gap-2 transition-opacity"><label className="cursor-pointer bg-white p-1.5 rounded-full"><Edit size={14}/><input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, (res) => updatePoint(selectedPointId, 'image', res))} /></label></div></div>)}</div><div className="space-y-1"><textarea className="w-full border rounded px-2 py-2 text-sm" rows="3" value={points.find(p => p.id === selectedPointId)?.description || ''} onChange={(e) => updatePoint(selectedPointId, 'description', e.target.value)} /></div></div>
                     </>
                   )}
                   
@@ -1070,10 +1178,12 @@ export default function App() {
                         <div className="flex justify-between"><label className="text-[10px] font-bold text-gray-400 uppercase">Tamaño Letra</label> <span className="text-xs text-gray-500">{points.find(p => p.id === selectedPointId)?.markerFontSize || 10}px</span></div>
                         <input type="range" min="6" max="32" className="w-full" value={points.find(p => p.id === selectedPointId)?.markerFontSize || 10} onChange={(e) => updatePoint(selectedPointId, 'markerFontSize', parseInt(e.target.value))} />
                         <button onClick={() => { updatePoint(selectedPointId, 'scaleX', 2.6); updatePoint(selectedPointId, 'scaleY', 1.1); updatePoint(selectedPointId, 'markerFontSize', 20); }} className="mt-2 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold py-1.5 rounded border border-gray-300 flex items-center justify-center gap-1"><LayoutTemplate size={12} /> Estándar (2.6x)</button>
-                        <button onClick={() => { updatePoint(selectedPointId, 'scaleX', 3); updatePoint(selectedPointId, 'scaleY', 1.1); updatePoint(selectedPointId, 'markerFontSize', 20); }} className="mt-2 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold py-1.5 rounded border border-gray-300 flex items-center justify-center gap-1"><LayoutTemplate size={12} /> Estándar 2 (3x)</button>
+                        <button onClick={() => { updatePoint(selectedPointId, 'scaleX', 3.6); updatePoint(selectedPointId, 'scaleY', 1.3); updatePoint(selectedPointId, 'markerFontSize', 20); }} className="mt-2 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold py-1.5 rounded border border-gray-300 flex items-center justify-center gap-1"><LayoutTemplate size={12} /> Estándar 2 (3.6x)</button>
                       </div>
                       <div className="space-y-1 pt-2"><label className="text-[10px] font-bold text-gray-400 uppercase">Etiqueta</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-center" value={points.find(p => p.id === selectedPointId)?.label || ''} onChange={(e) => updatePoint(selectedPointId, 'label', e.target.value)} /></div>
-                      <div className="space-y-4 pt-4 border-t"><div className="flex items-center gap-2"><span className="text-[10px] font-bold bg-blue-50 text-blue-500 px-2 rounded">INFO POPUP</span></div><div className="space-y-1"><label className="text-xs text-gray-500">Título</label><input type="text" className="w-full border rounded px-2 py-1.5 text-sm" value={points.find(p => p.id === selectedPointId)?.title || ''} onChange={(e) => updatePoint(selectedPointId, 'title', e.target.value)} /></div><div className="space-y-2"><label className="text-xs text-gray-500">Imagen</label>{!points.find(p => p.id === selectedPointId)?.image ? (<label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50"><ImageIcon size={16}/><input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, (res) => updatePoint(selectedPointId, 'image', res))} /></label>) : (<div className="relative group"><img src={points.find(p => p.id === selectedPointId).image} className="w-full h-32 object-cover rounded-lg" /><div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex justify-center items-center gap-2 transition-opacity"><label className="cursor-pointer bg-white p-1.5 rounded-full"><Edit size={14}/><input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, (res) => updatePoint(selectedPointId, 'image', res))} /></label></div></div>)}</div><div className="space-y-1"><textarea className="w-full border rounded px-2 py-2 text-sm" rows="3" value={points.find(p => p.id === selectedPointId)?.description || ''} onChange={(e) => updatePoint(selectedPointId, 'description', e.target.value)} /></div></div>
+                      <div className="space-y-1 pt-2"><label className="text-[10px] font-bold text-gray-400 uppercase">Lugar</label><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm" value={points.find(p => p.id === selectedPointId)?.place || ''} onChange={(e) => updatePoint(selectedPointId, 'place', e.target.value)} placeholder="Ej: Zona Norte" /></div>
+
+                      <div className="space-y-4 pt-4 border-t"><div className="flex items-center gap-2"><span className="text-[10px] font-bold bg-blue-50 text-blue-500 px-2 rounded">INFO POPUP</span></div><div className="space-y-2 pt-2 border-t mt-2"><label className="text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1"><FileBadge size={10}/> Documento Asociado</label><div className="flex gap-2">{['LUP', 'POE', 'LILA'].map(doc => (<button key={doc} onClick={() => updatePoint(selectedPointId, 'docType', doc)} className={`flex-1 py-1 text-[10px] font-bold rounded border transition-all ${points.find(p => p.id === selectedPointId)?.docType === doc ? 'bg-blue-100 text-blue-700 border-blue-300 ring-1 ring-blue-500' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>{doc}</button>))}</div><input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Código (Ej: TPM-MP1-001)" value={points.find(p => p.id === selectedPointId)?.docCode || ''} onChange={(e) => updatePoint(selectedPointId, 'docCode', e.target.value)} /></div><div className="space-y-2"><label className="text-xs text-gray-500">Imagen</label>{!points.find(p => p.id === selectedPointId)?.image ? (<label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50"><ImageIcon size={16}/><input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, (res) => updatePoint(selectedPointId, 'image', res))} /></label>) : (<div className="relative group"><img src={points.find(p => p.id === selectedPointId).image} className="w-full h-32 object-cover rounded-lg" /><div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex justify-center items-center gap-2 transition-opacity"><label className="cursor-pointer bg-white p-1.5 rounded-full"><Edit size={14}/><input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, (res) => updatePoint(selectedPointId, 'image', res))} /></label></div></div>)}</div><div className="space-y-1"><textarea className="w-full border rounded px-2 py-2 text-sm" rows="3" value={points.find(p => p.id === selectedPointId)?.description || ''} onChange={(e) => updatePoint(selectedPointId, 'description', e.target.value)} /></div></div>
                     </>
                   )}
                   <button onClick={() => setSelectedPointId(null)} className="w-full py-2.5 bg-gray-800 text-white text-xs font-bold rounded-lg">Guardar</button>
