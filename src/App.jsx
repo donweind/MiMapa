@@ -81,7 +81,6 @@ const ElementWrapper = React.memo(({ children, point, isSelected, readOnly, onMo
         transform: 'translate(-50%, -50%)' 
       }}
     >
-      {/* ELIMINADO: Indicador de Estado */}
       {children}
     </div>
   );
@@ -181,21 +180,15 @@ const Popup = React.memo(({ point, onClose }) => {
     >
       <div className="bg-gray-50 px-4 py-3 border-b flex justify-between items-center">
         <div className="flex flex-col gap-1 w-full">
-            {/* TÍTULO (Usando Label como Título) */}
             <h3 className="font-black text-gray-900 text-lg truncate pr-2 max-w-[250px]">{point.label}</h3>
-            
-            {/* LUGAR */}
             {point.place && (
                 <div className="flex items-center gap-1 text-xs text-gray-500 font-medium">
                     <MapIcon size={12} /> {point.place}
                 </div>
             )}
-            
-            {/* PRIORIDAD, ESTADO Y DOCUMENTO */}
             <div className="flex flex-wrap gap-2 mt-1">
                 {point.priority && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${point.priority === 'A' ? 'bg-red-50 text-red-600 border-red-200' : point.priority === 'B' ? 'bg-yellow-50 text-yellow-600 border-yellow-200' : 'bg-green-50 text-green-600 border-green-200'}`}>PRIORIDAD {point.priority}</span>}
                 {statusConfig && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${statusConfig.bg} ${statusConfig.textC} ${statusConfig.border}`}>{statusConfig.text}</span>}
-                {/* DOCUMENTO (Movido aquí) */}
                 {point.docType && point.docCode && (
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-1">
                         <FileBadge size={8}/> {point.docType} | {point.docCode}
@@ -220,7 +213,6 @@ const Popup = React.memo(({ point, onClose }) => {
       )}
       
       <div className="p-4 bg-white">
-         {/* TITULO DE DESCRIPCIÓN */}
          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Descripción</p>
          <p className="text-sm text-gray-700 leading-relaxed">
            {point.description || <span className="italic text-gray-400">Sin descripción disponible.</span>}
@@ -228,6 +220,39 @@ const Popup = React.memo(({ point, onClose }) => {
       </div>
     </div>
   );
+});
+
+// Componente optimizado para renderizar el contenido del mapa
+const MapContent = React.memo(({ 
+    mapImage, 
+    points, 
+    selectedPointId, 
+    isReadOnly, 
+    onMouseDown, 
+    onDoubleClick, 
+    onClosePopup 
+}) => {
+    return (
+        <>
+            <img 
+                src={mapImage} 
+                alt="Plano" 
+                draggable="false" 
+                className="pointer-events-none block max-w-none" 
+            />
+            {points.map(point => (
+                <React.Fragment key={point.id}>
+                    {point.type === 'text' 
+                      ? <TextElement point={point} isSelected={selectedPointId === point.id} readOnly={isReadOnly} onMouseDown={onMouseDown} onDoubleClick={onDoubleClick} /> 
+                      : point.type === 'safety' 
+                      ? <SafetyElement point={point} isSelected={selectedPointId === point.id} readOnly={isReadOnly} onMouseDown={onMouseDown} onDoubleClick={onDoubleClick} />
+                      : <MarkerElement point={point} isSelected={selectedPointId === point.id} readOnly={isReadOnly} onMouseDown={onMouseDown} onDoubleClick={onDoubleClick} />
+                    }
+                    {selectedPointId === point.id && (point.type === 'marker' || point.type === 'safety') && (<Popup point={point} onClose={onClosePopup} />)}
+                </React.Fragment>
+            ))}
+        </>
+    );
 });
 
 /* --- APP PRINCIPAL --- */
@@ -241,7 +266,6 @@ export default function App() {
   const [adminPreviewMode, setAdminPreviewMode] = useState(false);
 
   /* --- ESTADOS DEL MAPA (Multi-Nivel) --- */
-  // Niveles disponibles: Sótano (sotano), Tierra (tierra), Mezanine (mezanine)
   const [levels, setLevels] = useState({
       sotano: { id: 'sotano', label: 'Sótano', short: 'ST', mapImage: null, points: [] },
       tierra: { id: 'tierra', label: 'Nivel Tierra', short: 'P1', mapImage: null, points: [] },
@@ -249,7 +273,6 @@ export default function App() {
   });
   const [currentLevelId, setCurrentLevelId] = useState('tierra');
 
-  // Helpers para acceder a los datos del nivel actual
   const currentLevel = levels[currentLevelId];
   const mapImage = currentLevel.mapImage;
   const points = currentLevel.points;
@@ -311,8 +334,6 @@ export default function App() {
   const handleLevelChange = (levelId) => {
       setCurrentLevelId(levelId);
       setSelectedPointId(null);
-      // Opcional: Resetear zoom/pan al cambiar de piso o mantenerlo
-      // setZoom(1); setPan({x:0,y:0}); 
   };
 
   /* --- LÓGICA DE NAVEGACIÓN Y LOGIN --- */
@@ -331,9 +352,7 @@ export default function App() {
 
   const handleFabricationEntry = () => {
     setIsAdmin(false);
-    // Verificar si hay algún mapa cargado en cualquier nivel
     const hasAnyMap = Object.values(levels).some(l => l.mapImage !== null);
-    
     if (hasAnyMap) {
         setCurrentScreen('fabrication_view');
         setZoom(1); 
@@ -382,6 +401,7 @@ export default function App() {
           const prioRaw = parts[1]?.trim().toUpperCase() || 'C'; 
           const descRaw = parts[2]?.trim() || ''; 
           const placeRaw = parts[3]?.trim() || '';
+          
           const statusRaw = parts[4]?.trim().toUpperCase() || 'PENDIENTE';
           let finalStatus = 'pending';
           if (statusRaw.includes('EJECUTADO')) finalStatus = 'executed';
@@ -427,8 +447,9 @@ export default function App() {
 
           return {
               id: Date.now() + index,
-              x: 5 + (index % 10) * 5, 
-              y: 10 + Math.floor(index / 10) * 5,
+              // Centrar en el mapa (50%) con un ligero desplazamiento de cuadrícula
+              x: 45 + (index % 5) * 3, 
+              y: 45 + Math.floor(index / 5) * 3,
               label: labelRaw, 
               priority: finalPrio,
               description: descRaw, 
@@ -493,7 +514,6 @@ export default function App() {
 
   /* --- IMPORTAR / EXPORTAR --- */
   const handleExportProject = () => {
-    // Exportamos el objeto completo 'levels'
     const dataStr = JSON.stringify({ version: "2.0", timestamp: new Date().toISOString(), levels, view: { zoom, pan }, currentLevelId });
     const link = document.createElement('a');
     link.href = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
@@ -508,17 +528,13 @@ export default function App() {
     reader.onload = (ev) => {
         try {
             const data = JSON.parse(ev.target.result);
-            
-            // Soporte para versión anterior (1.0) - Migración
             if (data.version === "1.0" || (!data.levels && data.mapImage)) {
-                // Mover datos antiguos al nivel tierra
                 setLevels(prev => ({
                     ...prev,
                     tierra: { ...prev.tierra, mapImage: data.mapImage, points: data.points || [] }
                 }));
                 setCurrentLevelId('tierra');
             } else if (data.levels) {
-                // Carga versión 2.0
                 setLevels(data.levels);
                 if (data.currentLevelId && data.levels[data.currentLevelId]) {
                     setCurrentLevelId(data.currentLevelId);
@@ -526,14 +542,9 @@ export default function App() {
             } else {
                 throw new Error("Formato inválido");
             }
-
             if (data.view) { setZoom(data.view.zoom || 1); setPan(data.view.pan || { x: 0, y: 0 }); }
-            
-            if (currentScreen === 'fabrication_load') {
-              setCurrentScreen('fabrication_view');
-            } else {
-              alert("Proyecto cargado exitosamente.");
-            }
+            if (currentScreen === 'fabrication_load') setCurrentScreen('fabrication_view');
+            else alert("Proyecto cargado exitosamente.");
         } catch { alert("Error al leer el archivo JSON."); }
     };
     reader.readAsText(file);
@@ -544,7 +555,6 @@ export default function App() {
     if (!mapImage || !imgRef.current) return;
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    
     const loadImage = (src) => new Promise((resolve, reject) => {
         const img = new Image();
         img.crossOrigin = "anonymous";
@@ -552,24 +562,19 @@ export default function App() {
         img.onerror = reject;
         img.src = src;
     });
-
     try {
         const bgImg = await loadImage(mapImage);
         const { naturalWidth, naturalHeight, width: displayWidth } = imgRef.current;
         const scaleRatio = naturalWidth / displayWidth;
-
         canvas.width = naturalWidth;
         canvas.height = naturalHeight;
         ctx.drawImage(bgImg, 0, 0);
-        
         for (const p of points) {
             if (filterPriority !== 'ALL' && p.priority !== filterPriority) continue;
-
             const x = (p.x / 100) * naturalWidth;
             const y = (p.y / 100) * naturalHeight;
             ctx.save();
             ctx.translate(x, y);
-            
             if (p.type === 'text') {
                 const fontSize = (p.fontSize || 14) * scaleRatio;
                 ctx.font = `${p.isItalic?'italic':''} ${p.isBold?'bold':''} ${fontSize}px ${p.fontFamily==='mono'?'monospace':p.fontFamily==='serif'?'serif':'sans-serif'}`;
@@ -597,7 +602,6 @@ export default function App() {
                 const w = s * (p.scaleX||1), h = s * (p.scaleY||1);
                 const conf = p.style==='dotted-black' ? MARKER_STYLES.dotted : MARKER_STYLES[p.style]||MARKER_STYLES.green;
                 const isCircle = p.style==='dotted-black';
-                
                 if (isCircle) {
                     ctx.beginPath(); ctx.ellipse(0,0,w/2,h/2,0,0,2*Math.PI);
                     ctx.fillStyle = p.markerColor||'transparent'; ctx.fill();
@@ -616,7 +620,6 @@ export default function App() {
             }
             ctx.restore();
         }
-        
         const link = document.createElement('a');
         link.download = `mapa_${currentLevel.id}.jpg`; 
         link.href = canvas.toDataURL('image/jpeg', 0.9); 
@@ -625,7 +628,7 @@ export default function App() {
   };
 
   /* --- HELPERS DE ESTADO --- */
-  const updatePoint = (id, field, value) => {
+  const updatePoint = useCallback((id, field, value) => {
       setPointsForLevel(prev => prev.map(p => {
           if (p.id !== id) return p;
           if (field === 'label') {
@@ -633,22 +636,27 @@ export default function App() {
           }
           return { ...p, [field]: value };
       }));
-  };
-  const deletePoint = (id) => { setPointsForLevel(prev => prev.filter(p => p.id !== id)); setSelectedPointId(null); };
+  }, [currentLevelId]); 
+  
+  const deletePoint = useCallback((id) => { 
+      setPointsForLevel(prev => prev.filter(p => p.id !== id)); 
+      setSelectedPointId(null); 
+  }, [currentLevelId]);
+
+  const onClosePopup = useCallback(() => {
+    setSelectedPointId(null);
+  }, []);
 
   const clampPan = useCallback((proposedPan, currentZoom) => {
     if (!containerRef.current || !imgRef.current) return proposedPan;
     const { clientWidth: cW, clientHeight: cH } = containerRef.current;
     const iW = imgRef.current.clientWidth * currentZoom;
     const iH = imgRef.current.clientHeight * currentZoom;
-
     if (iW <= cW && iH <= cH) return { x: (cW - iW)/2, y: (cH - iH)/2 };
-
     const minX = iW > cW ? cW - iW : (cW - iW)/2;
     const maxX = iW > cW ? 0 : minX;
     const minY = iH > cH ? cH - iH : (cH - iH)/2;
     const maxY = iH > cH ? 0 : minY;
-
     return { x: Math.min(Math.max(proposedPan.x, minX), maxX), y: Math.min(Math.max(proposedPan.y, minY), maxY) };
   }, []);
 
@@ -656,7 +664,6 @@ export default function App() {
   const handleZoom = (delta) => {
       setZoom(z => {
           const next = Math.min(Math.max(z + delta, 0.2), 8);
-          // Standard center zoom for buttons
           requestAnimationFrame(() => setPan(p => clampPan(p, next)));
           return next;
       });
@@ -664,30 +671,18 @@ export default function App() {
   
   const handleResetView = () => { setZoom(1); requestAnimationFrame(() => setPan(clampPan({x:0,y:0}, 1))); };
   
-  // ZOOM TO CURSOR LOGIC (UPDATED)
   const handleWheel = (e) => {
       if (!mapImage || !containerRef.current) return;
-      
       e.preventDefault(); 
-
       const rect = containerRef.current.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
-
       const delta = e.deltaY * -0.001;
       const nextZoom = Math.min(Math.max(zoom + delta, 0.2), 8);
-
-      // Calcular la posición del mouse relativa al mundo (antes del zoom)
-      // mouseX = panX + worldX * zoom
-      // worldX = (mouseX - panX) / zoom
       const worldX = (mouseX - pan.x) / zoom;
       const worldY = (mouseY - pan.y) / zoom;
-
-      // Calcular nueva posición de paneo para mantener el punto bajo el mouse estático
-      // newPanX = mouseX - worldX * nextZoom
       const newPanX = mouseX - worldX * nextZoom;
       const newPanY = mouseY - worldY * nextZoom;
-
       setZoom(nextZoom);
       setPan(clampPan({ x: newPanX, y: newPanY }, nextZoom));
   };
@@ -736,8 +731,6 @@ export default function App() {
     if (!isAdmin || adminPreviewMode || !mapImage || isPanning || draggingElementId) return; 
     const r = mapRef.current.getBoundingClientRect();
     const nextNum = points.filter(p => p.type === 'marker').length + 1;
-    
-    // Default Priority A, Status Process
     const base = { id: Date.now(), x: ((e.clientX-r.left)/r.width)*100, y: ((e.clientY-r.top)/r.height)*100, label: `Punto ${nextNum}`, image: null, description: '', priority: 'A', status: 'process' };
     
     let newItem;
@@ -751,69 +744,39 @@ export default function App() {
     setPointsForLevel(prev => [...prev, newItem]); setSelectedPointId(newItem.id);
   };
 
-  const visiblePoints = points.filter(p => filterPriority === 'ALL' || p.priority === filterPriority);
+  const visiblePoints = useMemo(() => 
+    points.filter(p => filterPriority === 'ALL' || p.priority === filterPriority),
+    [points, filterPriority]
+  );
 
   /* --- RENDERS --- */
 
-  // 1. LANDING (Minimalista)
+  // 1. LANDING
   if (currentScreen === 'landing') {
     return (
       <div className="flex flex-col h-screen w-screen bg-gray-50 relative overflow-hidden">
-        
-        {/* FABRICATION SECTION (Main Content - 95%) */}
-        <div 
-          onClick={handleFabricationEntry}
-          className="flex-1 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors group"
-        >
+        <div onClick={handleFabricationEntry} className="flex-1 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors group">
           <div className="text-center space-y-6 animate-in fade-in zoom-in duration-700">
-             <div className="w-24 h-24 bg-black text-white rounded-full flex items-center justify-center mx-auto shadow-2xl group-hover:scale-110 transition-transform">
-                <Users size={48} />
-             </div>
-             <div>
-               <h1 className="text-5xl font-black tracking-tighter text-gray-900 mb-2">MAPA DE OPERACIONES</h1>
-               <p className="text-xl text-gray-500 tracking-[0.3em] font-light uppercase">Ingreso a Fabricación</p>
-             </div>
-             <div className="opacity-0 group-hover:opacity-100 transition-opacity text-sm font-bold text-gray-400 mt-4">
-                Haga clic en cualquier lugar para entrar
-             </div>
+             <div className="w-24 h-24 bg-black text-white rounded-full flex items-center justify-center mx-auto shadow-2xl group-hover:scale-110 transition-transform"><Users size={48} /></div>
+             <div><h1 className="text-5xl font-black tracking-tighter text-gray-900 mb-2">MAPA DE OPERACIONES</h1><p className="text-xl text-gray-500 tracking-[0.3em] font-light uppercase">Ingreso a Fabricación</p></div>
+             <div className="opacity-0 group-hover:opacity-100 transition-opacity text-sm font-bold text-gray-400 mt-4">Haga clic en cualquier lugar para entrar</div>
           </div>
         </div>
-
-        {/* ADMIN SECTION (Corner - 5%) */}
-        <div 
-          onClick={() => setCurrentScreen('admin_login')}
-          className="absolute bottom-6 right-6 z-50 p-3 text-gray-300 hover:text-gray-900 transition-colors cursor-pointer"
-          title="Administrador"
-        >
-          <ShieldCheck size={24} />
-        </div>
-
-        {/* FOOTER */}
-        <div className="absolute bottom-4 left-0 right-0 text-center pointer-events-none">
-          <p className="text-[10px] text-gray-400 font-serif tracking-widest">Creado por Elias Dolores para la MP1-CAÑETE</p>
-        </div>
-
+        <div onClick={() => setCurrentScreen('admin_login')} className="absolute bottom-6 right-6 z-50 p-3 text-gray-300 hover:text-gray-900 transition-colors cursor-pointer" title="Administrador"><ShieldCheck size={24} /></div>
+        <div className="absolute bottom-4 left-0 right-0 text-center pointer-events-none"><p className="text-[10px] text-gray-400 font-serif tracking-widest">Creado por Elias Dolores para la MP1-CAÑETE</p></div>
       </div>
     );
   }
 
-  // 2. LOGIN ADMIN (Minimalista)
+  // 2. LOGIN ADMIN
   if (currentScreen === 'admin_login') {
     return (
       <div className="flex h-screen bg-gray-50 items-center justify-center p-4">
         <div className="bg-white p-10 rounded-xl shadow-lg w-full max-w-sm relative border border-gray-100">
           <button onClick={() => setCurrentScreen('landing')} className="absolute top-4 right-4 text-gray-400 hover:text-black transition-colors"><X size={20}/></button>
-          
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-black text-white mb-4"><Lock size={18} /></div>
-            <h2 className="text-xl font-bold text-gray-900">Acceso Restringido</h2>
-          </div>
-
+          <div className="text-center mb-8"><div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-black text-white mb-4"><Lock size={18} /></div><h2 className="text-xl font-bold text-gray-900">Acceso Restringido</h2></div>
           <form onSubmit={handleLoginSubmit} className="space-y-6">
-            <div>
-              <input type="password" autoFocus className={`w-full border-b-2 bg-transparent px-2 py-3 text-center text-xl tracking-widest outline-none focus:border-black transition-colors ${loginError ? 'border-red-500 text-red-600' : 'border-gray-200 text-gray-800'}`} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="• • • • • •" />
-              {loginError && <p className="text-red-500 text-xs mt-2 text-center font-medium">Clave incorrecta</p>}
-            </div>
+            <div><input type="password" autoFocus className={`w-full border-b-2 bg-transparent px-2 py-3 text-center text-xl tracking-widest outline-none focus:border-black transition-colors ${loginError ? 'border-red-500 text-red-600' : 'border-gray-200 text-gray-800'}`} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="• • • • • •" />{loginError && <p className="text-red-500 text-xs mt-2 text-center font-medium">Clave incorrecta</p>}</div>
             <button type="submit" className="w-full bg-black text-white font-bold py-3 rounded-lg hover:bg-gray-800 transition-colors">Ingresar</button>
           </form>
         </div>
@@ -821,24 +784,16 @@ export default function App() {
     );
   }
 
-  // 3. CARGA FABRICACIÓN (Minimalista - Dark Theme)
+  // 3. CARGA FABRICACIÓN
   if (currentScreen === 'fabrication_load') {
     return (
       <div className="flex h-screen bg-gray-950 text-white items-center justify-center p-6 relative">
         <button onClick={handleExitToLanding} className="absolute top-8 left-8 flex items-center gap-2 text-gray-500 hover:text-white transition-colors text-sm font-medium tracking-wide"><X size={18}/> CANCELAR</button>
-        
         <div className="max-w-xl w-full text-center">
           <h1 className="text-3xl font-bold tracking-tight mb-2">FABRICACIÓN</h1>
           <p className="text-gray-500 tracking-widest text-sm uppercase mb-12">Carga de Mapa Operativo</p>
-
           <div className="flex flex-col gap-4">
-             {/* Opción Cargar JSON */}
-             <div onClick={() => jsonInputRef.current?.click()} className="group cursor-pointer bg-white/5 border border-white/10 hover:border-white/30 rounded-xl p-8 transition-all hover:bg-white/10 flex flex-col items-center">
-                <FileJson size={32} className="text-gray-400 group-hover:text-white mb-4 transition-colors"/>
-                <span className="font-bold">Cargar Archivo JSON</span>
-                <span className="text-xs text-gray-500 mt-1">Formato de proyecto completo</span>
-                <input type="file" ref={jsonInputRef} accept=".json" className="hidden" onChange={handleImportProject} />
-             </div>
+             <div onClick={() => jsonInputRef.current?.click()} className="group cursor-pointer bg-white/5 border border-white/10 hover:border-white/30 rounded-xl p-8 transition-all hover:bg-white/10 flex flex-col items-center"><FileJson size={32} className="text-gray-400 group-hover:text-white mb-4 transition-colors"/><span className="font-bold">Cargar Archivo JSON</span><span className="text-xs text-gray-500 mt-1">Formato de proyecto completo</span><input type="file" ref={jsonInputRef} accept=".json" className="hidden" onChange={handleImportProject} /></div>
           </div>
         </div>
       </div>
@@ -855,7 +810,7 @@ export default function App() {
       <input type="file" ref={fileInputRef} onChange={handleImportProject} accept=".json" className="hidden" />
       <input type="file" ref={mapInputRef} onChange={(e) => handleFileUpload(e)} accept="image/*,application/pdf" className="hidden" />
       
-      {/* HEADER: En modo visor se superpone (absolute), en modo admin es relativo */}
+      {/* HEADER */}
       <header className={`backdrop-blur-md border-b shadow-sm z-50 transition-all duration-300 
         ${isViewer 
             ? 'absolute top-0 left-0 w-full bg-[#0f172a]/95 text-white border-none' 
@@ -863,7 +818,6 @@ export default function App() {
         }`}>
         
         <div className="px-6 py-2 flex justify-between items-center h-16">
-            {/* IZQUIERDA: Identidad */}
             <div className="flex items-center gap-3 min-w-fit">
                 <div className={`p-2 rounded-lg flex items-center justify-center ${isViewer ? 'bg-white/10 text-white' : 'bg-black text-white'}`}>
                     {isViewer ? <Users size={20}/> : <ShieldCheck size={20} />}
@@ -876,81 +830,45 @@ export default function App() {
                 </div>
             </div>
 
-            {/* CENTRO: Filtros */}
             {mapImage && (
                 <div className={`flex items-center gap-1 p-1 rounded-lg border shadow-sm mx-4 overflow-x-auto ${isViewer ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                     <div className={`px-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider ${isViewer ? 'text-gray-400' : 'text-gray-400'}`}>
                         <Filter size={12}/> Criticidad
                     </div>
                     {['ALL', 'A', 'B', 'C'].map(f => (
-                        <button 
-                            key={f} 
-                            onClick={() => setFilterPriority(f)}
-                            className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all whitespace-nowrap ${
-                                filterPriority === f 
-                                ? (f === 'A' ? 'bg-red-500 text-white' : f === 'B' ? 'bg-yellow-500 text-white' : f === 'C' ? 'bg-green-500 text-white' : (isViewer ? 'bg-gray-600 text-white' : 'bg-gray-800 text-white'))
-                                : (isViewer ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100')
-                            }`}
-                        >
-                            {f === 'ALL' ? 'Todos' : `${f}`}
-                        </button>
+                        <button key={f} onClick={() => setFilterPriority(f)} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all whitespace-nowrap ${filterPriority === f ? (f === 'A' ? 'bg-red-500 text-white' : f === 'B' ? 'bg-yellow-500 text-white' : f === 'C' ? 'bg-green-500 text-white' : (isViewer ? 'bg-gray-600 text-white' : 'bg-gray-800 text-white')) : (isViewer ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100')}`}>{f === 'ALL' ? 'Todos' : `${f}`}</button>
                     ))}
                 </div>
             )}
 
-            {/* DERECHA: Acciones */}
             <div className="flex items-center gap-3 min-w-fit">
                 {isAdmin && mapImage && (
-                    <button 
-                        onClick={() => setAdminPreviewMode(!adminPreviewMode)}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold border transition-all ${adminPreviewMode ? 'bg-green-100 text-green-700 border-green-300' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
-                        title={adminPreviewMode ? "Volver a editar" : "Ver como operario"}
-                    >
-                        {adminPreviewMode ? <Eye size={14}/> : <EyeOff size={14}/>}
-                        <span className="hidden sm:inline">{adminPreviewMode ? "Vista Operario" : "Vista Editor"}</span>
-                    </button>
+                    <button onClick={() => setAdminPreviewMode(!adminPreviewMode)} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold border transition-all ${adminPreviewMode ? 'bg-green-100 text-green-700 border-green-300' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`} title={adminPreviewMode ? "Volver a editar" : "Ver como operario"}>{adminPreviewMode ? <Eye size={14}/> : <EyeOff size={14}/>}<span className="hidden sm:inline">{adminPreviewMode ? "Vista Operario" : "Vista Editor"}</span></button>
                 )}
-                
                 <div className={`h-6 w-px ${isViewer ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
-
                 {isAdmin && (
-                    <button onClick={handleCloseProject} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors" title="Cerrar Proyecto (Borrar Mapa)">
-                        <Trash2 size={18} />
-                    </button>
+                    <button onClick={handleCloseProject} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors" title="Cerrar Proyecto (Borrar Mapa)"><Trash2 size={18} /></button>
                 )}
-
-                <button onClick={handleExitToLanding} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${isViewer ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                    <LogOut size={14} /> Salir
-                </button>
+                <button onClick={handleExitToLanding} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${isViewer ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}><LogOut size={14} /> Salir</button>
             </div>
         </div>
 
-        {/* TOOLBAR SECUNDARIA (SOLO ADMIN y NO PREVIEW) */}
         {isAdmin && !adminPreviewMode && mapImage && (
             <div className="px-6 py-2 bg-gray-50/80 border-t border-gray-200 flex justify-between items-center gap-4 overflow-x-auto">
-                {/* Herramientas */}
                 <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mr-2">Herramientas</span>
                     <div className="flex bg-white rounded-lg border border-gray-200 p-0.5 shadow-sm">
-                        {[
-                            {id: 'marker', icon: MapIcon, label: 'Marcador'},
-                            {id: 'text', icon: Type, label: 'Texto'},
-                            {id: 'safety', icon: TriangleAlert, label: 'Seguridad'}
-                        ].map(t => (
-                            <button key={t.id} onClick={() => setTool(t.id)} className={`px-3 py-1.5 rounded-md flex items-center gap-2 text-xs font-semibold transition-all ${tool === t.id ? 'bg-black text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}>
-                                <t.icon size={14}/> {t.label}
-                            </button>
+                        {[{id: 'marker', icon: MapIcon, label: 'Marcador'},{id: 'text', icon: Type, label: 'Texto'},{id: 'safety', icon: TriangleAlert, label: 'Seguridad'}].map(t => (
+                            <button key={t.id} onClick={() => setTool(t.id)} className={`px-3 py-1.5 rounded-md flex items-center gap-2 text-xs font-semibold transition-all ${tool === t.id ? 'bg-black text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}><t.icon size={14}/> {t.label}</button>
                         ))}
                     </div>
                 </div>
 
-                {/* Importar Datos (NUEVO) */}
                 <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mr-2">Datos</span>
                     <button onClick={() => setShowBulkImportModal(true)} className="px-3 py-1.5 rounded-md text-xs font-medium bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 flex items-center gap-2" title="Importar lista de puntos"><FileText size={14} /> Importar Datos</button>
                 </div>
 
-                {/* Archivo (REORGANIZADO) */}
                 <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mr-2">Archivo</span>
                     <div className="flex gap-1">
@@ -995,11 +913,11 @@ export default function App() {
                       <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-200">
                           <p className="font-bold mb-1">Instrucciones:</p>
                           <p>Pega tu lista de datos en el siguiente formato (una línea por punto):</p>
-                          <code className="block mt-2 bg-white p-1 rounded border border-gray-200 font-mono text-gray-600">Número, Prioridad (A/B/C), Descripción, Lugar, Estado, TipoDoc, CodigoDoc</code>
+                          <code className="block mt-2 bg-white p-1 rounded border border-gray-200 font-mono text-gray-600">Número;Prioridad (A/B/C);Descripción;Lugar;Estado;TipoDoc;CodigoDoc</code>
                       </div>
                       <textarea 
                           className="w-full h-48 border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-black focus:border-black outline-none font-mono"
-                          placeholder={`Ejemplo:\nLDA 77, B, Rejilla, Zona 1, PENDIENTE, LILA, 001\nFC 10, A, Fuga, Zona 2, EJECUTADO, POE, 002`}
+                          placeholder={`Ejemplo:\nLDA 77;B;Rejilla;Zona 1;PENDIENTE;LILA;001\nFC 10;A;Fuga;Zona 2;EJECUTADO;POE;002`}
                           value={bulkImportText}
                           onChange={(e) => setBulkImportText(e.target.value)}
                       />
@@ -1026,9 +944,7 @@ export default function App() {
                     </div>
                     
                     <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center hover:bg-gray-50 transition-colors cursor-pointer group flex flex-col items-center justify-center gap-2">
-                        <div className="bg-gray-100 w-10 h-10 rounded-full flex items-center justify-center text-gray-400 group-hover:text-black transition-colors">
-                            <FileJson size={18} />
-                        </div>
+                        <div className="bg-gray-100 w-10 h-10 rounded-full flex items-center justify-center text-gray-400 group-hover:text-black transition-colors"><FileJson size={18} /></div>
                         <h3 className="text-xs font-bold text-gray-600">Cargar Proyecto JSON</h3>
                     </div>
                  </div>
@@ -1043,70 +959,22 @@ export default function App() {
                     <button onClick={() => deletePoint(selectedPointId)} className="text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
                   </div>
                   
-                  {/* SELECTOR DE CRITICIDAD */}
                   <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-2">
                       <label className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1"><Filter size={10}/> Criticidad / Nivel</label>
                       <div className="flex gap-2">
                           {['A', 'B', 'C'].map(p => (
-                              <button 
-                                key={p}
-                                onClick={() => updatePoint(selectedPointId, 'priority', p)}
-                                className={`flex-1 py-1.5 text-xs font-bold rounded border transition-all ${
-                                    points.find(item => item.id === selectedPointId)?.priority === p
-                                    ? (p==='A' ? 'bg-red-100 text-red-700 border-red-300 ring-1 ring-red-500' : p==='B' ? 'bg-yellow-100 text-yellow-700 border-yellow-300 ring-1 ring-yellow-500' : 'bg-green-100 text-green-700 border-green-300 ring-1 ring-green-500')
-                                    : 'bg-white text-gray-500 hover:bg-gray-50'
-                                }`}
-                              >
-                                {p}
-                              </button>
+                              <button key={p} onClick={() => updatePoint(selectedPointId, 'priority', p)} className={`flex-1 py-1.5 text-xs font-bold rounded border transition-all ${points.find(item => item.id === selectedPointId)?.priority === p ? (p==='A' ? 'bg-red-100 text-red-700 border-red-300 ring-1 ring-red-500' : p==='B' ? 'bg-yellow-100 text-yellow-700 border-yellow-300 ring-1 ring-yellow-500' : 'bg-green-100 text-green-700 border-green-300 ring-1 ring-green-500') : 'bg-white text-gray-500 hover:bg-gray-50'}`}>{p}</button>
                           ))}
                       </div>
                   </div>
 
-                  {/* SELECTOR DE ESTADO (NUEVO) */}
                   <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-2">
                       <label className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1"><CheckCircle2 size={10}/> Estado del Trabajo</label>
                       <div className="grid grid-cols-1 gap-1.5">
-                          <button 
-                            onClick={() => updatePoint(selectedPointId, 'status', 'executed')}
-                            className={`flex items-center justify-center gap-2 py-1.5 text-xs font-bold rounded border transition-all ${
-                                points.find(item => item.id === selectedPointId)?.status === 'executed'
-                                ? 'bg-green-600 text-white border-green-600 shadow-sm'
-                                : 'bg-white text-gray-500 hover:bg-green-50 hover:text-green-600 border-gray-200'
-                            }`}
-                          >
-                            <CheckCircle2 size={12}/> EJECUTADO
-                          </button>
-                          <button 
-                            onClick={() => updatePoint(selectedPointId, 'status', 'process')}
-                            className={`flex items-center justify-center gap-2 py-1.5 text-xs font-bold rounded border transition-all ${
-                                points.find(item => item.id === selectedPointId)?.status === 'process'
-                                ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
-                                : 'bg-white text-gray-500 hover:bg-orange-50 hover:text-orange-600 border-gray-200'
-                            }`}
-                          >
-                            <Clock size={12}/> EN PROCESO
-                          </button>
-                          <button 
-                            onClick={() => updatePoint(selectedPointId, 'status', 'delayed')}
-                            className={`flex items-center justify-center gap-2 py-1.5 text-xs font-bold rounded border transition-all ${
-                                points.find(item => item.id === selectedPointId)?.status === 'delayed'
-                                ? 'bg-red-600 text-white border-red-600 shadow-sm'
-                                : 'bg-white text-gray-500 hover:bg-red-50 hover:text-red-600 border-gray-200'
-                            }`}
-                          >
-                            <AlertOctagon size={12}/> ATRASADO
-                          </button>
-                          <button 
-                            onClick={() => updatePoint(selectedPointId, 'status', 'pending')}
-                            className={`flex items-center justify-center gap-2 py-1.5 text-xs font-bold rounded border transition-all ${
-                                points.find(item => item.id === selectedPointId)?.status === 'pending'
-                                ? 'bg-gray-500 text-white border-gray-500 shadow-sm'
-                                : 'bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-600 border-gray-200'
-                            }`}
-                          >
-                            <Circle size={12}/> PENDIENTE
-                          </button>
+                          <button onClick={() => updatePoint(selectedPointId, 'status', 'executed')} className={`flex items-center justify-center gap-2 py-1.5 text-xs font-bold rounded border transition-all ${points.find(item => item.id === selectedPointId)?.status === 'executed' ? 'bg-green-600 text-white border-green-600 shadow-sm' : 'bg-white text-gray-500 hover:bg-green-50 hover:text-green-600 border-gray-200'}`}><CheckCircle2 size={12}/> EJECUTADO</button>
+                          <button onClick={() => updatePoint(selectedPointId, 'status', 'process')} className={`flex items-center justify-center gap-2 py-1.5 text-xs font-bold rounded border transition-all ${points.find(item => item.id === selectedPointId)?.status === 'process' ? 'bg-orange-500 text-white border-orange-500 shadow-sm' : 'bg-white text-gray-500 hover:bg-orange-50 hover:text-orange-600 border-gray-200'}`}><Clock size={12}/> EN PROCESO</button>
+                          <button onClick={() => updatePoint(selectedPointId, 'status', 'delayed')} className={`flex items-center justify-center gap-2 py-1.5 text-xs font-bold rounded border transition-all ${points.find(item => item.id === selectedPointId)?.status === 'delayed' ? 'bg-red-600 text-white border-red-600 shadow-sm' : 'bg-white text-gray-500 hover:bg-red-50 hover:text-red-600 border-gray-200'}`}><AlertOctagon size={12}/> ATRASADO</button>
+                          <button onClick={() => updatePoint(selectedPointId, 'status', 'pending')} className={`flex items-center justify-center gap-2 py-1.5 text-xs font-bold rounded border transition-all ${points.find(item => item.id === selectedPointId)?.status === 'pending' ? 'bg-gray-500 text-white border-gray-500 shadow-sm' : 'bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-600 border-gray-200'}`}><Circle size={12}/> PENDIENTE</button>
                       </div>
                   </div>
 
@@ -1214,18 +1082,17 @@ export default function App() {
             </div> 
           ) : (
             <div ref={mapRef} className="absolute origin-top-left transition-transform duration-75 ease-linear" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, minWidth: '100%' }} onDoubleClick={handleMapDoubleClick}>
-              <img ref={imgRef} src={mapImage} alt="Plano" draggable="false" className="pointer-events-none block max-w-none" />
-              {visiblePoints.map(point => (
-                  <React.Fragment key={point.id}>
-                      {point.type === 'text' 
-                        ? <TextElement point={point} isSelected={selectedPointId === point.id} readOnly={isReadOnly} onMouseDown={handleMouseDown} onDoubleClick={handleDoubleClick} /> 
-                        : point.type === 'safety' 
-                        ? <SafetyElement point={point} isSelected={selectedPointId === point.id} readOnly={isReadOnly} onMouseDown={handleMouseDown} onDoubleClick={handleDoubleClick} />
-                        : <MarkerElement point={point} isSelected={selectedPointId === point.id} readOnly={isReadOnly} onMouseDown={handleMouseDown} onDoubleClick={handleDoubleClick} />
-                      }
-                      {selectedPointId === point.id && (point.type === 'marker' || point.type === 'safety') && (<Popup point={point} onClose={() => setSelectedPointId(null)} />)}
-                  </React.Fragment>
-              ))}
+              <div style={{ position: 'relative' }}>
+                <MapContent 
+                    mapImage={mapImage}
+                    points={visiblePoints}
+                    selectedPointId={selectedPointId}
+                    isReadOnly={isReadOnly}
+                    onMouseDown={handleMouseDown}
+                    onDoubleClick={handleDoubleClick}
+                    onClosePopup={onClosePopup}
+                />
+              </div>
             </div>
           )}
           {mapImage && isAdmin && !adminPreviewMode && <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur px-4 py-1.5 rounded-full text-white text-xs pointer-events-none opacity-80">Doble clic para crear</div>}
